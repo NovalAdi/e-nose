@@ -10,6 +10,7 @@ import 'components/prediction_summary_card.dart';
 import 'components/action_controls_grid.dart';
 import 'components/logs_console_card.dart';
 import 'components/sensor_config_tab.dart';
+import 'components/history_tab.dart';
 
 class DashboardView extends StatefulWidget {
   const DashboardView({super.key});
@@ -19,7 +20,7 @@ class DashboardView extends StatefulWidget {
 }
 
 class _DashboardViewState extends State<DashboardView> {
-  int _activeTab = 0; // 0 = Main Dashboard, 1 = Config
+  int _activeTab = 0; // 0 = Main Dashboard, 1 = Config, 2 = History
 
   @override
   Widget build(BuildContext context) {
@@ -57,6 +58,7 @@ class _DashboardViewState extends State<DashboardView> {
                       children: [
                         _buildMainDashboardTab(settings, sampler),
                         SensorConfigTab(settings: settings),
+                        const HistoryTab(),
                       ],
                     ),
                   ),

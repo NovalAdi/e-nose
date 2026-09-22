@@ -56,6 +56,13 @@ class TopNavBar extends StatelessWidget {
             icon: Icons.tune_outlined,
             title: "Pengaturan Sensor",
           ),
+          const SizedBox(width: 10),
+          _buildCapsuleTab(
+            context: context,
+            index: 2,
+            icon: Icons.history_outlined,
+            title: "Riwayat Sampling",
+          ),
           const Spacer(),
 
           // Active Sample & Status Pill Indicator

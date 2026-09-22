@@ -24,7 +24,7 @@ class ActionControlsGrid extends StatelessWidget {
               Expanded(
                 child: ActionButtonCard(
                   label: "Sampling",
-                  subLabel: "Ambil data & CSV",
+                  subLabel: "Ambil data sensor",
                   icon: Icons.play_arrow_rounded,
                   onPressed: sampler.isRunning
                       ? null

@@ -11,7 +11,7 @@ class SettingsProvider with ChangeNotifier {
   final ApiService _apiService;
 
   String _selectedPort = '';
-  double _samplingInterval = 1.0;
+  double _samplingInterval = 60.0;
   String _selectedSampleType = 'Teh';
   final List<String> _sampleTypes = ['Teh', 'Kopi'];
   String _sampleName = 'Hitam';
@@ -20,13 +20,13 @@ class SettingsProvider with ChangeNotifier {
   String _apiUrl = 'http://localhost:5000';
   String _csvExportDirectory = '';
   String _defaultExportDirectory = '';
-  
+
   final Map<String, SensorConfig> _sensorConfigs = {};
   final Map<String, Map<String, SensorConfig>> _savedProfiles = {};
   String _currentProfile = "Config Sensor V2";
   String _lastActiveProfile = "Config Sensor V2";
   bool _hasUnsavedChanges = false;
-  
+
   SettingsProvider(this._serialService, this._apiService) {
     _initDefaultProfiles();
     _refreshPorts();
@@ -43,7 +43,7 @@ class SettingsProvider with ChangeNotifier {
   String get deviceId => _deviceId;
   String get apiUrl => _apiUrl;
   Map<String, SensorConfig> get sensorConfigs => _sensorConfigs;
-  
+
   List<String> get availablePorts => _serialService.getAvailablePorts();
   bool get isConnected => _serialService.isConnected;
 
@@ -158,7 +158,9 @@ class SettingsProvider with ChangeNotifier {
         dialogTitle: "Pilih Folder Simpan CSV",
         initialDirectory: _csvExportDirectory.isNotEmpty
             ? _csvExportDirectory
-            : (_defaultExportDirectory.isNotEmpty ? _defaultExportDirectory : null),
+            : (_defaultExportDirectory.isNotEmpty
+                  ? _defaultExportDirectory
+                  : null),
       );
       if (selectedPath != null && selectedPath.trim().isNotEmpty) {
         csvExportDirectory = selectedPath.trim();
@@ -173,11 +175,11 @@ class SettingsProvider with ChangeNotifier {
   /// Initialize default profiles with Config Sensor V2 as default
   void _initDefaultProfiles() {
     final pins = ['A0', 'A1', 'A2', 'A3', 'A4', 'A5', 'A6', 'A7', 'A8', 'A9'];
-    
+
     // 1. Config Sensor V2 (From config sensor v2.hbb - Default)
     final v2SensorMap = {
       'A0': 'MQ6',
-      'A1': 'MQ4', 
+      'A1': 'MQ4',
       'A2': 'TGS2620',
       'A3': 'MQ5',
       'A4': 'MQ2',
@@ -253,7 +255,9 @@ class SettingsProvider with ChangeNotifier {
 
   /// Save current configuration under a given profile name
   void saveCurrentAsProfile(String name) {
-    final cleanName = name.trim().isEmpty ? "Setting ${_savedProfiles.length + 1}" : name.trim();
+    final cleanName = name.trim().isEmpty
+        ? "Setting ${_savedProfiles.length + 1}"
+        : name.trim();
     final profile = <String, SensorConfig>{};
     for (final entry in _sensorConfigs.entries) {
       profile[entry.key] = entry.value.clone();
@@ -378,19 +382,19 @@ class SettingsProvider with ChangeNotifier {
     try {
       final file = File(filePath);
       final sink = file.openWrite();
-      
+
       sink.writeln("# T-NOSE Sensor Configuration File");
       sink.writeln("# Generated on: ${DateTime.now()}");
       sink.writeln("# Format: PIN=ENABLED,NAME,TYPE");
       sink.writeln("");
-      
+
       for (final entry in _sensorConfigs.entries) {
         final pin = entry.key;
         final config = entry.value;
         final enabled = config.enabled ? "1" : "0";
         sink.writeln("$pin=$enabled,${config.name},${config.type}");
       }
-      
+
       await sink.flush();
       await sink.close();
       return true;
@@ -405,25 +409,25 @@ class SettingsProvider with ChangeNotifier {
     try {
       final file = File(filePath);
       if (!await file.exists()) return false;
-      
+
       final lines = await file.readAsLines();
       final importedConfig = <String, SensorConfig>{};
 
       for (final line in lines) {
         final trimmed = line.trim();
         if (trimmed.isEmpty || trimmed.startsWith('#')) continue;
-        
+
         if (trimmed.contains('=')) {
           final parts = trimmed.split('=');
           final pin = parts[0].trim();
           final configStr = parts[1].trim();
-          
+
           final configParts = configStr.split(',');
           if (configParts.length >= 3) {
             final enabled = configParts[0].trim() == '1';
             final name = configParts[1].trim();
             final type = configParts[2].trim();
-            
+
             importedConfig[pin] = SensorConfig(
               pin: pin,
               enabled: enabled,
@@ -437,7 +441,7 @@ class SettingsProvider with ChangeNotifier {
       if (importedConfig.isNotEmpty) {
         final fileName = file.uri.pathSegments.last.replaceAll('.hbb', '');
         final profileName = fileName.isNotEmpty ? fileName : "Imported Setting";
-        
+
         _savedProfiles[profileName] = importedConfig;
         selectProfile(profileName);
         return true;

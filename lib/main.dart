@@ -1,17 +1,49 @@
 import 'package:flutter/material.dart';
+import 'package:window_manager/window_manager.dart';
 import 'package:provider/provider.dart';
 import 'services/serial_service.dart';
 import 'services/api_service.dart';
+import 'services/database_helper.dart';
 import 'providers/settings_provider.dart';
 import 'providers/sampling_provider.dart';
+import 'providers/history_provider.dart';
 import 'views/dashboard_view.dart';
 
-void main() {
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Initialize window manager for desktop
+  await windowManager.ensureInitialized();
+
+  // Configure window to be fullscreen and locked
+  WindowOptions windowOptions = const WindowOptions(
+    fullScreen: true,
+    skipTaskbar: false,
+    titleBarStyle: TitleBarStyle.hidden,
+  );
+
+  windowManager.waitUntilReadyToShow(windowOptions, () async {
+    await windowManager.show();
+    await windowManager.focus();
+    await windowManager.setFullScreen(true);
+    await windowManager.setPreventClose(false);
+    // Prevent minimize and resize
+    await windowManager.setResizable(false);
+    await windowManager.setMinimizable(false);
+  });
+
+  // Initialize database
+  final dbHelper = DatabaseHelper();
+  await dbHelper.initDatabase();
 
   // Initialize services
   final serialService = SerialService();
   final apiService = ApiService();
+
+  // Create providers
+  final historyProvider = HistoryProvider();
+  final samplingProvider = SamplingProvider(serialService, apiService);
+  samplingProvider.setHistoryProvider(historyProvider);
 
   runApp(
     MultiProvider(
@@ -21,9 +53,8 @@ void main() {
         ChangeNotifierProvider(
           create: (context) => SettingsProvider(serialService, apiService),
         ),
-        ChangeNotifierProvider(
-          create: (context) => SamplingProvider(serialService, apiService),
-        ),
+        ChangeNotifierProvider.value(value: samplingProvider),
+        ChangeNotifierProvider.value(value: historyProvider),
       ],
       child: const MyApp(),
     ),

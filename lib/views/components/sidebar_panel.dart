@@ -27,11 +27,18 @@ class _SidebarPanelState extends State<SidebarPanel> {
   void initState() {
     super.initState();
     _intervalController = TextEditingController(
-      text: widget.settings.samplingInterval.toString().replaceAll(RegExp(r'\.0$'), ''),
+      text: widget.settings.samplingInterval.toString().replaceAll(
+        RegExp(r'\.0$'),
+        '',
+      ),
     );
-    _sampleNameController = TextEditingController(text: widget.settings.sampleName);
+    _sampleNameController = TextEditingController(
+      text: widget.settings.sampleName,
+    );
     _deviceIdController = TextEditingController(text: widget.settings.deviceId);
-    _csvDirectoryController = TextEditingController(text: widget.settings.csvExportDirectory);
+    _csvDirectoryController = TextEditingController(
+      text: widget.settings.csvExportDirectory,
+    );
 
     widget.settings.addListener(_onSettingsChanged);
   }
@@ -110,7 +117,11 @@ class _SidebarPanelState extends State<SidebarPanel> {
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: const Center(
-                  child: Icon(Icons.psychology, color: AppColors.primaryRed, size: 36),
+                  child: Icon(
+                    Icons.psychology,
+                    color: AppColors.primaryRed,
+                    size: 36,
+                  ),
                 ),
               ),
             ),
@@ -152,10 +163,14 @@ class _SidebarPanelState extends State<SidebarPanel> {
             style: ElevatedButton.styleFrom(
               backgroundColor: settings.selectedPort.isEmpty
                   ? Colors.grey[400]
-                  : (settings.isConnected ? AppColors.textDark : AppColors.primaryRed),
+                  : (settings.isConnected
+                        ? AppColors.textDark
+                        : AppColors.primaryRed),
               foregroundColor: Colors.white,
               padding: const EdgeInsets.symmetric(vertical: 14),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
             ),
             onPressed: sampler.isRunning || settings.selectedPort.isEmpty
                 ? null
@@ -164,7 +179,10 @@ class _SidebarPanelState extends State<SidebarPanel> {
                     sampler.addLog(msg);
                     if (context.mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text(msg), duration: const Duration(seconds: 3)),
+                        SnackBar(
+                          content: Text(msg),
+                          duration: const Duration(seconds: 3),
+                        ),
                       );
                     }
                   },
@@ -179,7 +197,10 @@ class _SidebarPanelState extends State<SidebarPanel> {
                 const SizedBox(width: 8),
                 Text(
                   settings.isConnected ? "Disconnect Port" : "Connect Port",
-                  style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
                 ),
               ],
             ),
@@ -193,7 +214,9 @@ class _SidebarPanelState extends State<SidebarPanel> {
                 backgroundColor: AppColors.danger,
                 foregroundColor: Colors.white,
                 padding: const EdgeInsets.symmetric(vertical: 14),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
               ),
               onPressed: () => sampler.stopAll(),
               child: const Row(
@@ -201,7 +224,13 @@ class _SidebarPanelState extends State<SidebarPanel> {
                 children: [
                   Icon(Icons.stop, color: Colors.white),
                   SizedBox(width: 6),
-                  Text("BATAL / STOP", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
+                  Text(
+                    "BATAL / STOP",
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -211,7 +240,10 @@ class _SidebarPanelState extends State<SidebarPanel> {
     );
   }
 
-  Widget _buildPortAndDeviceCard(SettingsProvider settings, SamplingProvider sampler) {
+  Widget _buildPortAndDeviceCard(
+    SettingsProvider settings,
+    SamplingProvider sampler,
+  ) {
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
@@ -244,9 +276,15 @@ class _SidebarPanelState extends State<SidebarPanel> {
                   ),
                   isExpanded: true,
                   dropdownColor: Colors.white,
-                  style: const TextStyle(color: AppColors.darkSlate, fontSize: 13),
+                  style: const TextStyle(
+                    color: AppColors.darkSlate,
+                    fontSize: 13,
+                  ),
                   underline: const SizedBox(),
-                  icon: const Icon(Icons.arrow_drop_down, color: AppColors.primaryRed),
+                  icon: const Icon(
+                    Icons.arrow_drop_down,
+                    color: AppColors.primaryRed,
+                  ),
                   items: settings.availablePorts.map((port) {
                     return DropdownMenuItem<String>(
                       value: port,
@@ -266,8 +304,14 @@ class _SidebarPanelState extends State<SidebarPanel> {
                 ),
               ),
               IconButton(
-                icon: const Icon(Icons.refresh, color: AppColors.primaryRed, size: 20),
-                onPressed: sampler.isRunning ? null : () => settings.refreshPortsList(),
+                icon: const Icon(
+                  Icons.refresh,
+                  color: AppColors.primaryRed,
+                  size: 20,
+                ),
+                onPressed: sampler.isRunning
+                    ? null
+                    : () => settings.refreshPortsList(),
               ),
             ],
           ),
@@ -298,8 +342,12 @@ class _SidebarPanelState extends State<SidebarPanel> {
     );
   }
 
-  Widget _buildCsvFolderCard(SettingsProvider settings, SamplingProvider sampler) {
-    final hasCustom = settings.csvExportDirectory.isNotEmpty &&
+  Widget _buildCsvFolderCard(
+    SettingsProvider settings,
+    SamplingProvider sampler,
+  ) {
+    final hasCustom =
+        settings.csvExportDirectory.isNotEmpty &&
         settings.defaultExportDirectory.isNotEmpty &&
         settings.csvExportDirectory != settings.defaultExportDirectory;
 
@@ -330,7 +378,8 @@ class _SidebarPanelState extends State<SidebarPanel> {
                       ? null
                       : () async {
                           await settings.resetCsvExportDirectoryToDefault();
-                          _csvDirectoryController.text = settings.csvExportDirectory;
+                          _csvDirectoryController.text =
+                              settings.csvExportDirectory;
                         },
                   borderRadius: BorderRadius.circular(4),
                   child: const Padding(
@@ -382,7 +431,10 @@ class _SidebarPanelState extends State<SidebarPanel> {
                         contentPadding: EdgeInsets.zero,
                         border: InputBorder.none,
                         hintText: "Folder Download (Default)",
-                        hintStyle: TextStyle(color: Colors.black38, fontSize: 11),
+                        hintStyle: TextStyle(
+                          color: Colors.black38,
+                          fontSize: 11,
+                        ),
                       ),
                       onChanged: (val) {
                         settings.csvExportDirectory = val;
@@ -393,7 +445,10 @@ class _SidebarPanelState extends State<SidebarPanel> {
                 IconButton(
                   tooltip: "Pilih Folder",
                   padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+                  constraints: const BoxConstraints(
+                    minWidth: 28,
+                    minHeight: 28,
+                  ),
                   icon: const Icon(
                     Icons.folder_open,
                     color: AppColors.primaryRed,
@@ -402,9 +457,11 @@ class _SidebarPanelState extends State<SidebarPanel> {
                   onPressed: sampler.isRunning
                       ? null
                       : () async {
-                          final picked = await settings.pickCsvExportDirectory();
+                          final picked = await settings
+                              .pickCsvExportDirectory();
                           if (picked) {
-                            _csvDirectoryController.text = settings.csvExportDirectory;
+                            _csvDirectoryController.text =
+                                settings.csvExportDirectory;
                           }
                         },
                 ),
@@ -440,7 +497,10 @@ class _SidebarPanelState extends State<SidebarPanel> {
     );
   }
 
-  Widget _buildIntervalCard(SettingsProvider settings, SamplingProvider sampler) {
+  Widget _buildIntervalCard(
+    SettingsProvider settings,
+    SamplingProvider sampler,
+  ) {
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
@@ -452,7 +512,7 @@ class _SidebarPanelState extends State<SidebarPanel> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text(
-            "INTERVAL SAMPLING (MENIT):",
+            "INTERVAL SAMPLING (DETIK):",
             style: TextStyle(
               color: AppColors.textDark,
               fontSize: 10,
@@ -473,7 +533,9 @@ class _SidebarPanelState extends State<SidebarPanel> {
                 Expanded(
                   child: TextField(
                     controller: _intervalController,
-                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
                     enabled: !sampler.isRunning,
                     style: const TextStyle(
                       color: AppColors.darkSlate,
@@ -496,13 +558,16 @@ class _SidebarPanelState extends State<SidebarPanel> {
                   ),
                 ),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 6,
+                    vertical: 3,
+                  ),
                   decoration: BoxDecoration(
                     color: AppColors.primaryRed.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(4),
                   ),
                   child: const Text(
-                    "menit",
+                    "detik",
                     style: TextStyle(
                       color: AppColors.primaryRed,
                       fontSize: 11,
@@ -518,7 +583,10 @@ class _SidebarPanelState extends State<SidebarPanel> {
     );
   }
 
-  Widget _buildSampleTypeCard(SettingsProvider settings, SamplingProvider sampler) {
+  Widget _buildSampleTypeCard(
+    SettingsProvider settings,
+    SamplingProvider sampler,
+  ) {
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
@@ -548,13 +616,17 @@ class _SidebarPanelState extends State<SidebarPanel> {
             ),
             child: DropdownButtonHideUnderline(
               child: DropdownButton<String>(
-                value: settings.sampleTypes.contains(settings.selectedSampleType)
+                value:
+                    settings.sampleTypes.contains(settings.selectedSampleType)
                     ? settings.selectedSampleType
                     : settings.sampleTypes.first,
                 isExpanded: true,
                 isDense: true,
                 dropdownColor: Colors.white,
-                icon: const Icon(Icons.arrow_drop_down, color: AppColors.primaryRed),
+                icon: const Icon(
+                  Icons.arrow_drop_down,
+                  color: AppColors.primaryRed,
+                ),
                 style: const TextStyle(
                   color: AppColors.darkSlate,
                   fontSize: 13,
@@ -588,7 +660,10 @@ class _SidebarPanelState extends State<SidebarPanel> {
     );
   }
 
-  Widget _buildSampleNameCard(SettingsProvider settings, SamplingProvider sampler) {
+  Widget _buildSampleNameCard(
+    SettingsProvider settings,
+    SamplingProvider sampler,
+  ) {
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,

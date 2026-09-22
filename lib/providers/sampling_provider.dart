@@ -4,6 +4,7 @@ import 'package:csv/csv.dart';
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
 import 'settings_provider.dart';
+import 'history_provider.dart';
 import '../services/serial_service.dart';
 import '../services/api_service.dart';
 import '../utils/sensor_parser.dart';
@@ -12,6 +13,7 @@ enum AppStatus { idle, sampling, predicting, flushing, testing }
 
 class SamplingProvider with ChangeNotifier {
   final SerialService _serialService;
+  HistoryProvider? _historyProvider;
   final ApiService _apiService;
 
   AppStatus _status = AppStatus.idle;
@@ -19,24 +21,40 @@ class SamplingProvider with ChangeNotifier {
   final List<Map<String, double>> _sensorDataPoints = [];
   final List<Map<String, double>> _liveChartPoints = [];
   Map<String, double> _currentLiveValues = {};
-  
+
   // Results
   String _predictionCategory = '-';
   double _tvcScore = 0.0;
   String _lastRawLine = '';
-  
+
   // Timers and Countdowns
   int _countdownSeconds = 0;
   Timer? _countdownTimer;
   StreamSubscription<String>? _serialSubscription;
 
+  /// Set the history provider reference (called from main.dart after both providers are created)
+  void setHistoryProvider(HistoryProvider provider) {
+    _historyProvider = provider;
+  }
+
   SamplingProvider(this._serialService, this._apiService) {
     // Listen to line stream to update live dashboard charts even when not sampling
     _serialService.lineStream.listen((line) {
       _lastRawLine = line;
-      final allPins = ['A0', 'A1', 'A2', 'A3', 'A4', 'A5', 'A6', 'A7', 'A8', 'A9'];
+      final allPins = [
+        'A0',
+        'A1',
+        'A2',
+        'A3',
+        'A4',
+        'A5',
+        'A6',
+        'A7',
+        'A8',
+        'A9',
+      ];
       _currentLiveValues = SensorParser.parseLine(line, allPins);
-      
+
       _liveChartPoints.add(_currentLiveValues);
       if (_liveChartPoints.length > 50) {
         _liveChartPoints.removeAt(0);
@@ -89,10 +107,10 @@ class SamplingProvider with ChangeNotifier {
   Future<void> runFlushSequence() async {
     addLog("Membersihkan gas - flushing...");
     _serialService.writeString('2'); // Send exhale signal
-    
+
     // In Python it flushes for 60 seconds
     await Future.delayed(const Duration(seconds: 60));
-    
+
     _serialService.writeString('3'); // Stop pumps
     await Future.delayed(const Duration(seconds: 5));
   }
@@ -115,11 +133,14 @@ class SamplingProvider with ChangeNotifier {
     addLog("Mulai testing...");
     notifyListeners();
 
-    _startCountdown(3, onFinished: () {
-      addLog("Testing selesai.");
-      _status = AppStatus.idle;
-      notifyListeners();
-    });
+    _startCountdown(
+      3,
+      onFinished: () {
+        addLog("Testing selesai.");
+        _status = AppStatus.idle;
+        notifyListeners();
+      },
+    );
   }
 
   /// Start manual flushing sequence
@@ -130,7 +151,7 @@ class SamplingProvider with ChangeNotifier {
     notifyListeners();
 
     await runFlushSequence();
-    
+
     addLog("Flushing selesai.");
     _status = AppStatus.idle;
     notifyListeners();
@@ -148,10 +169,13 @@ class SamplingProvider with ChangeNotifier {
     _sensorDataPoints.clear();
     _predictionCategory = '-';
     _tvcScore = 0.0;
-    
-    final sampleLabel = "${settings.selectedSampleType} - ${settings.sampleName}";
+
+    final sampleLabel =
+        "${settings.selectedSampleType} - ${settings.sampleName}";
     final nextCount = settings.samplingCount + 1;
-    addLog("Mulai sampling #$nextCount [$sampleLabel] - Interval: ${settings.samplingInterval} menit...");
+    addLog(
+      "Mulai sampling #$nextCount [$sampleLabel] - Interval: ${settings.samplingInterval.toInt()} detik...",
+    );
     notifyListeners();
 
     // Step 1: Send Stop, wait 3 seconds
@@ -161,49 +185,70 @@ class SamplingProvider with ChangeNotifier {
     // Step 2: Send Inhale, countdown sampling interval
     addLog("Menyedot sampel gas...");
     _serialService.writeString('1');
-    
-    final samplingDurationSeconds = (settings.samplingInterval * 60).toInt();
-    _startCountdown(samplingDurationSeconds, onFinished: () async {
-      // Step 3: Send Stop, wait 20 seconds
-      _serialService.writeString('3');
-      addLog("Mempersiapkan pembacaan data sensor (tunggu 20 detik)...");
-      
-      _startCountdown(20, onFinished: () async {
-        // Step 4: Collect data (60 lines)
-        addLog("Mengambil data sensor...");
-        final enabledPins = settings.getEnabledPins();
-        
-        final completer = Completer<void>();
-        int count = 0;
-        
-        _serialSubscription = _serialService.lineStream.listen((line) {
-          _lastRawLine = line;
-          final parsed = SensorParser.parseLine(line, enabledPins);
-          _currentLiveValues = parsed;
-          _sensorDataPoints.add(parsed);
-          
-          count++;
-          if (count >= 60) {
-            _serialSubscription?.cancel();
-            completer.complete();
-          }
-          notifyListeners();
-        });
 
-        await completer.future;
-        addLog("Pembacaan data selesai. Menyimpan file CSV...");
+    final samplingDurationSeconds = settings.samplingInterval.toInt();
+    _startCountdown(
+      samplingDurationSeconds,
+      onFinished: () async {
+        // Step 3: Send Stop, wait 20 seconds
+        _serialService.writeString('3');
+        addLog("Mempersiapkan pembacaan data sensor (tunggu 20 detik)...");
 
-        // Save CSV to Desktop or Documents
-        await saveCsvFile(settings);
+        _startCountdown(
+          20,
+          onFinished: () async {
+            // Step 4: Collect data (60 lines)
+            addLog("Mengambil data sensor...");
+            final enabledPins = settings.getEnabledPins();
 
-        // Exhale and clean
-        await runFlushSequence();
+            final completer = Completer<void>();
+            int count = 0;
 
-        addLog("Akhir sampling.");
-        _status = AppStatus.idle;
-        notifyListeners();
-      });
-    });
+            _serialSubscription = _serialService.lineStream.listen((line) {
+              _lastRawLine = line;
+              final parsed = SensorParser.parseLine(line, enabledPins);
+              _currentLiveValues = parsed;
+              _sensorDataPoints.add(parsed);
+
+              count++;
+              if (count >= 60) {
+                _serialSubscription?.cancel();
+                completer.complete();
+              }
+              notifyListeners();
+            });
+
+            await completer.future;
+            addLog("Pembacaan data selesai. Menyimpan ke database...");
+
+            // Save to database via HistoryProvider
+            if (_historyProvider != null) {
+              await _historyProvider!.addRecord(
+                sampleType: settings.selectedSampleType,
+                sampleName: settings.sampleName,
+                profileName: settings.currentProfile,
+                sensorDataPoints: List.from(_sensorDataPoints),
+                sensorNamesMap: settings.getSensorNamesMap(),
+                samplingCount: settings.samplingCount + 1,
+              );
+              settings.incrementSamplingCount();
+              addLog("Data sampling berhasil disimpan ke riwayat.");
+            } else {
+              addLog(
+                "Peringatan: HistoryProvider belum tersedia, data tidak tersimpan.",
+              );
+            }
+
+            // Exhale and clean
+            await runFlushSequence();
+
+            addLog("Akhir sampling.");
+            _status = AppStatus.idle;
+            notifyListeners();
+          },
+        );
+      },
+    );
   }
 
   /// Start prediction sequence calling the Flask API
@@ -219,7 +264,8 @@ class SamplingProvider with ChangeNotifier {
     _predictionCategory = '-';
     _tvcScore = 0.0;
 
-    final sampleLabel = "${settings.selectedSampleType} - ${settings.sampleName}";
+    final sampleLabel =
+        "${settings.selectedSampleType} - ${settings.sampleName}";
     addLog("Mulai prediksi sampel [$sampleLabel]...");
     notifyListeners();
 
@@ -230,82 +276,112 @@ class SamplingProvider with ChangeNotifier {
     // Step 2: Inhale, countdown
     addLog("Menyedot gas sampel...");
     _serialService.writeString('1');
-    
-    final samplingDurationSeconds = (settings.samplingInterval * 60).toInt();
-    _startCountdown(samplingDurationSeconds, onFinished: () async {
-      // Step 3: Stop, wait 60 seconds (original Python delay before reading)
-      _serialService.writeString('3');
-      addLog("Mempersiapkan pembacaan sensor (tunggu 60 detik)...");
-      
-      _startCountdown(60, onFinished: () async {
-        // Step 4: Collect data (60 lines)
-        addLog("Membaca data sensor...");
-        final enabledPins = settings.getEnabledPins();
-        
-        final completer = Completer<void>();
-        int count = 0;
-        
-        _serialSubscription = _serialService.lineStream.listen((line) {
-          _lastRawLine = line;
-          final parsed = SensorParser.parseLine(line, enabledPins);
-          _currentLiveValues = parsed;
-          _sensorDataPoints.add(parsed);
-          
-          count++;
-          if (count >= 60) {
-            _serialSubscription?.cancel();
-            completer.complete();
-          }
-          notifyListeners();
-        });
 
-        await completer.future;
-        addLog("Data sensor berhasil dibaca. Mengirim ke API untuk klasifikasi & XAI...");
+    final samplingDurationSeconds = settings.samplingInterval.toInt();
+    _startCountdown(
+      samplingDurationSeconds,
+      onFinished: () async {
+        // Step 3: Stop, wait 60 seconds (original Python delay before reading)
+        _serialService.writeString('3');
+        addLog("Mempersiapkan pembacaan sensor (tunggu 60 detik)...");
 
-        // Step 5: Calculate averages across 60 rows
-        final allPins = ['A0', 'A1', 'A2', 'A3', 'A4', 'A5', 'A6', 'A7', 'A8', 'A9'];
-        final averages = SensorParser.calculateAverages(_sensorDataPoints, allPins);
-        final averageValuesList = allPins.map((pin) => averages[pin]!).toList();
+        _startCountdown(
+          60,
+          onFinished: () async {
+            // Step 4: Collect data (60 lines)
+            addLog("Membaca data sensor...");
+            final enabledPins = settings.getEnabledPins();
 
-        // Step 6: Hit API
-        try {
-          final result = await _apiService.predict(
-            deviceId: settings.deviceId,
-            sensorValues: averageValuesList,
-          );
+            final completer = Completer<void>();
+            int count = 0;
 
-          if (result['status'] == 'success') {
-            _predictionCategory = result['classification'].toString();
-            // Let's format the multiclass code into letter category
-            if (_predictionCategory == '0') {
-              _predictionCategory = 'A';
-            } else if (_predictionCategory == '1') {
-              _predictionCategory = 'C';
-            } else if (_predictionCategory == '2') {
-              _predictionCategory = 'D';
-            } else if (_predictionCategory == '3') {
-              _predictionCategory = 'E';
-            } else if (_predictionCategory == '4') {
-              _predictionCategory = 'F';
+            _serialSubscription = _serialService.lineStream.listen((line) {
+              _lastRawLine = line;
+              final parsed = SensorParser.parseLine(line, enabledPins);
+              _currentLiveValues = parsed;
+              _sensorDataPoints.add(parsed);
+
+              count++;
+              if (count >= 60) {
+                _serialSubscription?.cancel();
+                completer.complete();
+              }
+              notifyListeners();
+            });
+
+            await completer.future;
+            addLog(
+              "Data sensor berhasil dibaca. Mengirim ke API untuk klasifikasi & XAI...",
+            );
+
+            // Step 5: Calculate averages across 60 rows
+            final allPins = [
+              'A0',
+              'A1',
+              'A2',
+              'A3',
+              'A4',
+              'A5',
+              'A6',
+              'A7',
+              'A8',
+              'A9',
+            ];
+            final averages = SensorParser.calculateAverages(
+              _sensorDataPoints,
+              allPins,
+            );
+            final averageValuesList = allPins
+                .map((pin) => averages[pin]!)
+                .toList();
+
+            // Step 6: Hit API
+            try {
+              final result = await _apiService.predict(
+                deviceId: settings.deviceId,
+                sensorValues: averageValuesList,
+              );
+
+              if (result['status'] == 'success') {
+                _predictionCategory = result['classification'].toString();
+                // Let's format the multiclass code into letter category
+                if (_predictionCategory == '0') {
+                  _predictionCategory = 'A';
+                } else if (_predictionCategory == '1') {
+                  _predictionCategory = 'C';
+                } else if (_predictionCategory == '2') {
+                  _predictionCategory = 'D';
+                } else if (_predictionCategory == '3') {
+                  _predictionCategory = 'E';
+                } else if (_predictionCategory == '4') {
+                  _predictionCategory = 'F';
+                }
+
+                _tvcScore =
+                    double.tryParse(result['regression_value'].toString()) ??
+                    0.0;
+                addLog(
+                  "Hasil Prediksi Kategori: $_predictionCategory | Nilai Prediksi: ${_tvcScore.toStringAsFixed(2)}",
+                );
+              } else {
+                addLog(
+                  "Gagal memproses prediksi: ${result['error'] ?? 'API Error'}",
+                );
+              }
+            } catch (e) {
+              addLog("Error saat memproses API: $e");
             }
 
-            _tvcScore = double.tryParse(result['regression_value'].toString()) ?? 0.0;
-            addLog("Hasil Prediksi Kategori: $_predictionCategory | Nilai Prediksi: ${_tvcScore.toStringAsFixed(2)}");
-          } else {
-            addLog("Gagal memproses prediksi: ${result['error'] ?? 'API Error'}");
-          }
-        } catch (e) {
-          addLog("Error saat memproses API: $e");
-        }
+            // Clean cycle
+            await runFlushSequence();
 
-        // Clean cycle
-        await runFlushSequence();
-
-        addLog("Proses prediksi selesai.");
-        _status = AppStatus.idle;
-        notifyListeners();
-      });
-    });
+            addLog("Proses prediksi selesai.");
+            _status = AppStatus.idle;
+            notifyListeners();
+          },
+        );
+      },
+    );
   }
 
   /// Helper to save collected data points as CSV file
@@ -316,14 +392,14 @@ class SamplingProvider with ChangeNotifier {
       final pins = sensorNamesMap.keys.toList();
 
       final List<List<dynamic>> rows = [headers];
-      
+
       for (final point in _sensorDataPoints) {
         final row = pins.map((pin) => (point[pin] ?? 0.0).round()).toList();
         rows.add(row);
       }
 
       final csvData = const ListToCsvConverter().convert(rows);
-      
+
       // Increment counter when saving new sampling file
       final currentCount = settings.incrementSamplingCount();
 
@@ -338,7 +414,9 @@ class SamplingProvider with ChangeNotifier {
           }
           baseDir = dir;
         } catch (dirErr) {
-          addLog("Peringatan: Folder custom tidak dapat diakses ($dirErr), menggunakan folder default.");
+          addLog(
+            "Peringatan: Folder custom tidak dapat diakses ($dirErr), menggunakan folder default.",
+          );
         }
       }
 
@@ -357,19 +435,21 @@ class SamplingProvider with ChangeNotifier {
           .trim()
           .replaceAll(RegExp(r'\s+'), '_')
           .replaceAll(RegExp(r'[^a-zA-Z0-9_-]'), '');
-      
+
       final rawSampleName = settings.sampleName.trim();
-      final sampleNamePrefix = (rawSampleName.isEmpty ? 'sampel' : rawSampleName)
-          .toLowerCase()
-          .replaceAll(RegExp(r'\s+'), '_')
-          .replaceAll(RegExp(r'[^a-zA-Z0-9_-]'), '');
+      final sampleNamePrefix =
+          (rawSampleName.isEmpty ? 'sampel' : rawSampleName)
+              .toLowerCase()
+              .replaceAll(RegExp(r'\s+'), '_')
+              .replaceAll(RegExp(r'[^a-zA-Z0-9_-]'), '');
 
       // Format: sampling_[jenis]_[nama]_[counter]_[timestamp].csv
-      final fileName = "sampling_${sampleTypePrefix}_${sampleNamePrefix}_${currentCount}_$timestamp.csv";
+      final fileName =
+          "sampling_${sampleTypePrefix}_${sampleNamePrefix}_${currentCount}_$timestamp.csv";
       final filePath = "${baseDir.path}/$fileName";
       final file = File(filePath);
       await file.writeAsString(csvData);
-      
+
       addLog("File CSV berhasil disimpan: $fileName");
       addLog("Lokasi: $filePath");
     } catch (e) {
