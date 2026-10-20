@@ -1,10 +1,12 @@
 import 'dart:io';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:file_picker/file_picker.dart';
 import '../models/sensor_config.dart';
 import '../services/serial_service.dart';
 import '../services/api_service.dart';
+import '../services/database_helper.dart';
 
 class SettingsProvider with ChangeNotifier {
   final SerialService _serialService;
@@ -31,6 +33,8 @@ class SettingsProvider with ChangeNotifier {
     _initDefaultProfiles();
     _refreshPorts();
     _initDefaultExportDirectory();
+    _loadProfilesFromDatabase();
+    _loadAppSettings();
   }
 
   // Getters
@@ -65,6 +69,7 @@ class SettingsProvider with ChangeNotifier {
   set samplingInterval(double value) {
     if (value > 0) {
       _samplingInterval = value;
+      _saveAppSetting('sampling_interval', value.toString());
       notifyListeners();
     }
   }
@@ -99,12 +104,14 @@ class SettingsProvider with ChangeNotifier {
 
   set deviceId(String value) {
     _deviceId = value;
+    _saveAppSetting('device_id', value);
     notifyListeners();
   }
 
   set apiUrl(String value) {
     _apiUrl = value;
     _apiService.updateBaseUrl(_apiUrl);
+    _saveAppSetting('api_url', value);
     notifyListeners();
   }
 
@@ -116,6 +123,7 @@ class SettingsProvider with ChangeNotifier {
     final trimmed = value.trim();
     if (_csvExportDirectory != trimmed) {
       _csvExportDirectory = trimmed;
+      _saveAppSetting('csv_export_directory', trimmed);
       notifyListeners();
     }
   }
@@ -254,7 +262,7 @@ class SettingsProvider with ChangeNotifier {
   }
 
   /// Save current configuration under a given profile name
-  void saveCurrentAsProfile(String name) {
+  Future<void> saveCurrentAsProfile(String name) async {
     final cleanName = name.trim().isEmpty
         ? "Setting ${_savedProfiles.length + 1}"
         : name.trim();
@@ -266,6 +274,9 @@ class SettingsProvider with ChangeNotifier {
     _currentProfile = cleanName;
     _lastActiveProfile = cleanName;
     _hasUnsavedChanges = false;
+
+    // Save to database
+    await _saveProfileToDatabase(cleanName, profile);
     notifyListeners();
   }
 
@@ -450,6 +461,126 @@ class SettingsProvider with ChangeNotifier {
     } catch (e) {
       debugPrint("Error importing settings: $e");
       return false;
+    }
+  }
+
+  /// Load all profiles from database
+  Future<void> _loadProfilesFromDatabase() async {
+    try {
+      final db = DatabaseHelper();
+      final profiles = await db.getAllSensorProfiles();
+
+      for (final row in profiles) {
+        final profileName = row['profile_name'] as String;
+        final configData = row['config_data'] as String;
+
+        try {
+          final List<dynamic> configList = jsonDecode(configData);
+          final profile = <String, SensorConfig>{};
+
+          for (final item in configList) {
+            final config = SensorConfig.fromJson(item as Map<String, dynamic>);
+            profile[config.pin] = config;
+          }
+
+          _savedProfiles[profileName] = profile;
+        } catch (e) {
+          debugPrint('Error parsing profile $profileName: $e');
+        }
+      }
+
+      // If we loaded profiles and current profile exists, select it
+      if (_savedProfiles.containsKey(_currentProfile)) {
+        selectProfile(_currentProfile);
+      }
+
+      notifyListeners();
+    } catch (e) {
+      debugPrint('Error loading profiles from database: $e');
+    }
+  }
+
+  /// Save a profile to database
+  Future<void> _saveProfileToDatabase(
+    String profileName,
+    Map<String, SensorConfig> profile,
+  ) async {
+    try {
+      final configList = profile.values
+          .map((config) => config.toJson())
+          .toList();
+      final configData = jsonEncode(configList);
+
+      final db = DatabaseHelper();
+      await db.saveSensorProfile(
+        profileName: profileName,
+        configData: configData,
+      );
+    } catch (e) {
+      debugPrint('Error saving profile to database: $e');
+    }
+  }
+
+  /// Delete a profile from memory and database
+  Future<bool> deleteProfile(String profileName) async {
+    // Don't allow deleting default profiles
+    if (profileName == "Config Sensor V2" ||
+        profileName == "Setting Default Pin" ||
+        profileName == "Setting 5 Sensor") {
+      return false;
+    }
+
+    try {
+      final db = DatabaseHelper();
+      await db.deleteSensorProfile(profileName);
+      _savedProfiles.remove(profileName);
+
+      // If we deleted the current profile, switch to default
+      if (_currentProfile == profileName) {
+        selectProfile("Config Sensor V2");
+      }
+
+      notifyListeners();
+      return true;
+    } catch (e) {
+      debugPrint('Error deleting profile: $e');
+      return false;
+    }
+  }
+
+  /// Load app settings from database
+  Future<void> _loadAppSettings() async {
+    try {
+      final db = DatabaseHelper();
+      final settings = await db.getAllSettings();
+      
+      if (settings.containsKey('device_id')) {
+        _deviceId = settings['device_id']!;
+      }
+      if (settings.containsKey('api_url')) {
+        _apiUrl = settings['api_url']!;
+        _apiService.updateBaseUrl(_apiUrl);
+      }
+      if (settings.containsKey('csv_export_directory')) {
+        _csvExportDirectory = settings['csv_export_directory']!;
+      }
+      if (settings.containsKey('sampling_interval')) {
+        _samplingInterval = double.tryParse(settings['sampling_interval']!) ?? 60.0;
+      }
+      
+      notifyListeners();
+    } catch (e) {
+      debugPrint('Error loading app settings: $e');
+    }
+  }
+
+  /// Save a single app setting to database
+  Future<void> _saveAppSetting(String key, String value) async {
+    try {
+      final db = DatabaseHelper();
+      await db.saveSetting(key, value);
+    } catch (e) {
+      debugPrint('Error saving app setting $key: $e');
     }
   }
 }

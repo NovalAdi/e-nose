@@ -21,7 +21,7 @@ class DatabaseHelper {
     _database = await databaseFactoryFfi.openDatabase(
       path,
       options: OpenDatabaseOptions(
-        version: 1,
+        version: 2,
         onCreate: (db, version) async {
           await db.execute('''
             CREATE TABLE sampling_history (
@@ -36,6 +36,42 @@ class DatabaseHelper {
               notes TEXT
             )
           ''');
+          await db.execute('''
+            CREATE TABLE sensor_profiles (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            profile_name TEXT NOT NULL UNIQUE,
+            config_data TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+            )
+          ''');
+          await db.execute('''
+            CREATE TABLE app_settings (
+            key TEXT PRIMARY KEY,
+            value TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+            )
+          ''');
+        },
+        onUpgrade: (db, oldVersion, newVersion) async {
+          if (oldVersion < 2) {
+            await db.execute('''
+              CREATE TABLE sensor_profiles (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              profile_name TEXT NOT NULL UNIQUE,
+              config_data TEXT NOT NULL,
+              created_at TEXT NOT NULL,
+              updated_at TEXT NOT NULL
+              )
+            ''');
+            await db.execute('''
+              CREATE TABLE app_settings (
+              key TEXT PRIMARY KEY,
+              value TEXT NOT NULL,
+              updated_at TEXT NOT NULL
+              )
+            ''');
+          }
         },
       ),
     );
@@ -106,5 +142,88 @@ class DatabaseHelper {
   Future<void> close() async {
     await _database?.close();
     _database = null;
+  }
+
+  /// Save a sensor configuration profile
+  Future<int> saveSensorProfile({
+    required String profileName,
+    required String configData,
+  }) async {
+    final now = DateTime.now().toIso8601String();
+    try {
+      return await _db.insert('sensor_profiles', {
+        'profile_name': profileName,
+        'config_data': configData,
+        'created_at': now,
+        'updated_at': now,
+      }, conflictAlgorithm: ConflictAlgorithm.replace);
+    } catch (e) {
+      // If insert fails due to unique constraint, update instead
+      return await _db.update(
+        'sensor_profiles',
+        {'config_data': configData, 'updated_at': now},
+        where: 'profile_name = ?',
+        whereArgs: [profileName],
+      );
+    }
+  }
+
+  /// Get all sensor profiles
+  Future<List<Map<String, dynamic>>> getAllSensorProfiles() async {
+    return await _db.query('sensor_profiles', orderBy: 'profile_name ASC');
+  }
+
+  /// Get a sensor profile by name
+  Future<Map<String, dynamic>?> getSensorProfile(String profileName) async {
+    final results = await _db.query(
+      'sensor_profiles',
+      where: 'profile_name = ?',
+      whereArgs: [profileName],
+    );
+    return results.isNotEmpty ? results.first : null;
+  }
+
+  /// Delete a sensor profile
+  Future<int> deleteSensorProfile(String profileName) async {
+    return await _db.delete(
+      'sensor_profiles',
+      where: 'profile_name = ?',
+      whereArgs: [profileName],
+    );
+  }
+
+  /// Save an app setting
+  Future<void> saveSetting(String key, String value) async {
+    final now = DateTime.now().toIso8601String();
+    await _db.insert(
+      'app_settings',
+      {
+        'key': key,
+        'value': value,
+        'updated_at': now,
+      },
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  /// Get an app setting
+  Future<String?> getSetting(String key) async {
+    final results = await _db.query(
+      'app_settings',
+      where: 'key = ?',
+      whereArgs: [key],
+    );
+    return results.isNotEmpty ? results.first['value'] as String : null;
+  }
+
+  /// Get all app settings
+  Future<Map<String, String>> getAllSettings() async {
+    final results = await _db.query('app_settings');
+    return Map.fromEntries(
+      results.map((row) => MapEntry(
+        row['key'] as String,
+        row['value'] as String,
+      )),
+    );
   }
 }
