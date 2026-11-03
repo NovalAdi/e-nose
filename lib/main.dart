@@ -15,9 +15,9 @@ void main() async {
   // Initialize window manager for desktop
   await windowManager.ensureInitialized();
 
-  // Configure window to be fullscreen and locked
+  // Configure window to be maximized (fullscreen but with taskbar visible)
   WindowOptions windowOptions = const WindowOptions(
-    fullScreen: true,
+    fullScreen: false,
     skipTaskbar: false,
     titleBarStyle: TitleBarStyle.hidden,
   );
@@ -25,11 +25,11 @@ void main() async {
   windowManager.waitUntilReadyToShow(windowOptions, () async {
     await windowManager.show();
     await windowManager.focus();
-    await windowManager.setFullScreen(true);
+    await windowManager.maximize();
     await windowManager.setPreventClose(false);
-    // Prevent minimize and resize
-    await windowManager.setResizable(false);
-    await windowManager.setMinimizable(false);
+    // Allow resize and minimize
+    await windowManager.setResizable(true);
+    await windowManager.setMinimizable(true);
   });
 
   // Initialize database
@@ -81,7 +81,10 @@ class MyApp extends StatelessWidget {
         ),
         scaffoldBackgroundColor: const Color(0xFFF8FAFC), // Slate 50
         textTheme: const TextTheme(
-          titleLarge: TextStyle(color: Color(0xFF0F172A), fontWeight: FontWeight.bold), // Slate 900
+          titleLarge: TextStyle(
+            color: Color(0xFF0F172A),
+            fontWeight: FontWeight.bold,
+          ), // Slate 900
           bodyMedium: TextStyle(color: Color(0xFF334155)), // Slate 700
         ),
       ),

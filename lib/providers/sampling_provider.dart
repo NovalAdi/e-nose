@@ -108,11 +108,18 @@ class SamplingProvider with ChangeNotifier {
     addLog("Membersihkan gas - flushing...");
     _serialService.writeString('2'); // Send exhale signal
 
-    // In Python it flushes for 60 seconds
-    await Future.delayed(const Duration(seconds: 60));
+    // Use countdown timer so it can be cancelled
+    final completer = Completer<void>();
+    _startCountdown(
+      60,
+      onFinished: () async {
+        _serialService.writeString('3'); // Stop pumps
+        await Future.delayed(const Duration(seconds: 5));
+        completer.complete();
+      },
+    );
 
-    _serialService.writeString('3'); // Stop pumps
-    await Future.delayed(const Duration(seconds: 5));
+    await completer.future;
   }
 
   /// Stop all operations immediately
@@ -120,9 +127,14 @@ class SamplingProvider with ChangeNotifier {
     _countdownTimer?.cancel();
     _serialSubscription?.cancel();
     _serialService.writeString('3'); // Stop command
+
+    final wasRunning = _status != AppStatus.idle;
     _status = AppStatus.idle;
     _countdownSeconds = 0;
-    addLog("Proses dibatalkan oleh pengguna.");
+
+    if (wasRunning) {
+      addLog("Proses dibatalkan oleh pengguna.");
+    }
     notifyListeners();
   }
 
@@ -338,36 +350,14 @@ class SamplingProvider with ChangeNotifier {
             // Step 6: Hit API
             try {
               final result = await _apiService.predict(
-                deviceId: settings.deviceId,
                 sensorValues: averageValuesList,
               );
 
-              if (result['status'] == 'success') {
-                _predictionCategory = result['classification'].toString();
-                // Let's format the multiclass code into letter category
-                if (_predictionCategory == '0') {
-                  _predictionCategory = 'A';
-                } else if (_predictionCategory == '1') {
-                  _predictionCategory = 'C';
-                } else if (_predictionCategory == '2') {
-                  _predictionCategory = 'D';
-                } else if (_predictionCategory == '3') {
-                  _predictionCategory = 'E';
-                } else if (_predictionCategory == '4') {
-                  _predictionCategory = 'F';
-                }
-
-                _tvcScore =
-                    double.tryParse(result['regression_value'].toString()) ??
-                    0.0;
-                addLog(
-                  "Hasil Prediksi Kategori: $_predictionCategory | Nilai Prediksi: ${_tvcScore.toStringAsFixed(2)}",
-                );
-              } else {
-                addLog(
-                  "Gagal memproses prediksi: ${result['error'] ?? 'API Error'}",
-                );
-              }
+              _predictionCategory = result['prediction'].toString();
+              
+              addLog(
+                "Hasil Prediksi Kategori: $_predictionCategory",
+              );
             } catch (e) {
               addLog("Error saat memproses API: $e");
             }

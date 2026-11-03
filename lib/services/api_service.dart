@@ -2,7 +2,7 @@ import 'package:dio/dio.dart';
 
 class ApiService {
   late Dio _dio;
-  String _baseUrl = 'http://localhost:5000';
+  String _baseUrl = 'https://enose-backend-gn0a.onrender.com';
 
   ApiService() {
     _initDio();
@@ -24,20 +24,30 @@ class ApiService {
         },
       ),
     );
+
+    // Add logger interceptor to print request and response in console
+    _dio.interceptors.add(
+      LogInterceptor(
+        request: true,
+        requestBody: true,
+        responseBody: true,
+        responseHeader: false,
+        error: true,
+        logPrint: (object) => print('[API_LOG] $object'),
+      ),
+    );
   }
 
   /// Send averaged sensor data to prediction API
   /// [sensorValues] must be a List of exactly 10 doubles corresponding to the sensors MQ9, MQ4, etc.
   Future<Map<String, dynamic>> predict({
-    required String deviceId,
     required List<double> sensorValues,
   }) async {
     try {
       final response = await _dio.post(
-        '/enose_greentea/predict',
+        '/predict', 
         data: {
-          'device_id': deviceId,
-          'data': [sensorValues],
+          'data': sensorValues,
         },
       );
       return response.data as Map<String, dynamic>;
