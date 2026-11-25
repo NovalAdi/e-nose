@@ -6,6 +6,7 @@ import '../../providers/settings_provider.dart';
 import '../../services/api_service.dart';
 import '../../utils/sensor_parser.dart';
 import 'package:csv/csv.dart';
+import '../../views/dialogs/history_detail_dialog.dart';
 
 class HistoryTab extends StatelessWidget {
   const HistoryTab({super.key});
@@ -457,127 +458,6 @@ class HistoryTab extends StatelessWidget {
     }
   }
 
-  void showHistoryDetailModal(
-    BuildContext context,
-    Map<String, dynamic> record,
-    HistoryProvider history,
-    SettingsProvider settings,
-  ) {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Row(
-          children: [
-            const Icon(
-              Icons.table_chart_rounded,
-              color: AppColors.primaryRed,
-              size: 22,
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                "Detail Sampling",
-                style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ),
-          ],
-        ),
-        content: SizedBox(
-          width: MediaQuery.of(context).size.width * 0.7,
-          child: SingleChildScrollView(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // Info Section
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: AppColors.surfaceLight,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Column(
-                    children: [
-                      _detailRow(
-                        "Waktu",
-                        _formatTimestamp(record['timestamp'] ?? '-'),
-                      ),
-                      _detailRow("Jenis Sampel", record['sample_type'] ?? '-'),
-                      _detailRow("Nama Sampel", record['sample_name'] ?? '-'),
-                      _detailRow("Profil", record['profile_name'] ?? '-'),
-                      _detailRow(
-                        "Jumlah Sampling",
-                        "${record['sampling_count'] ?? '-'}",
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 16),
-                const Text(
-                  "Data Sensor (CSV)",
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 13,
-                    color: AppColors.textDark,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: AppColors.background,
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: AppColors.border),
-                  ),
-                  child: SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: Text(
-                      record['sensor_data'] ?? '-',
-                      style: const TextStyle(
-                        fontFamily: 'monospace',
-                        fontSize: 11,
-                        color: AppColors.darkSlate,
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text(
-              "Tutup",
-              style: TextStyle(color: AppColors.textMuted),
-            ),
-          ),
-          ElevatedButton.icon(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.success,
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
-              ),
-            ),
-            onPressed: () {
-              Navigator.of(ctx).pop();
-              _exportCsv(context, record['id'] as int, history, settings);
-            },
-            icon: const Icon(Icons.download_rounded, size: 18),
-            label: const Text("Export CSV"),
-          ),
-        ],
-      ),
-    );
-  }
-
   Widget _detailRow(String label, String value) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
@@ -632,22 +512,24 @@ class HistoryTab extends StatelessWidget {
 
     if (filePath != null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text("CSV berhasil di-export: $filePath"),
-          backgroundColor: AppColors.success,
-          behavior: SnackBarBehavior.floating,
-          duration: const Duration(seconds: 4),
-        ),
+        _buildSnackBar(context, "CSV berhasil di-export: $filePath", success: true),
       );
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("Gagal meng-export file CSV."),
-          backgroundColor: AppColors.danger,
-          behavior: SnackBarBehavior.floating,
-        ),
+        _buildSnackBar(context, "Gagal meng-export file CSV.", success: false),
       );
     }
+  }
+
+  /// Uniform SnackBar helper used by history/table, connect/disconnect, and all
+  /// other actions so the toast style stays consistent across the app.
+  SnackBar _buildSnackBar(BuildContext context, String message, {required bool success}) {
+    return SnackBar(
+      content: Text(message),
+      backgroundColor: success ? AppColors.success : AppColors.danger,
+      behavior: SnackBarBehavior.floating,
+      duration: const Duration(seconds: 3),
+    );
   }
 
   void _confirmDelete(BuildContext context, int id, HistoryProvider history) {

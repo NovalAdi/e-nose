@@ -154,6 +154,77 @@ class SerialService {
     }
   }
 
+  /// Send a command and wait for the device's acknowledgment.
+  ///
+  /// - Sends [command] and waits for a line starting with "ACK:" within [timeout].
+  /// - If no response, resends up to [maxRetries] times (default 3) with
+  ///   [retryInterval] (default 500 ms) between attempts.
+  /// - If all retries fail, reconnect to the port and repeat the cycle
+  ///   until [maxCycles] (default 3) or success.
+  /// - Returns `true` if ACK received, `false` after all cycles exhausted.
+  Future<bool> sendCommandWithAck(String command, {
+    Duration timeout = const Duration(milliseconds: 1500),
+    int maxRetries = 3,
+    int retryInterval = 500,
+    int maxCycles = 3,
+  }) async {
+    int cycles = 0;
+    while (cycles < maxCycles) {
+      int failed = 0;
+      while (failed < maxRetries) {
+        writeString(command);
+        final response = await _waitForAck(timeout);
+        if (response != null) return true;
+        failed++;
+        if (failed < maxRetries) {
+          await Future.delayed(Duration(milliseconds: retryInterval));
+        }
+      }
+      // All retries failed: reconnect and retry the cycle
+      cycles++;
+      if (cycles >= maxCycles) return false;
+      await _reconnectAndReset();
+      if (!isConnected) {
+        return false;
+      }
+    }
+    return false;
+  }
+
+  /// Wait for a single line starting with "ACK:" from the device.
+  /// Returns the ACK line, or `null` if no response within [timeout].
+  Future<String?> _waitForAck(Duration timeout) async {
+    final completer = Completer<String?>();
+    Timer? timer;
+    late StreamSubscription<String> subscription;
+
+    subscription = _lineStreamController.stream.listen((line) {
+      if (line.startsWith('ACK:') && !completer.isCompleted) {
+        completer.complete(line);
+        subscription.cancel();
+        timer?.cancel();
+      }
+    });
+
+    timer = Timer(timeout, () {
+      if (!completer.isCompleted) {
+        completer.complete(null);
+        subscription.cancel();
+      }
+    });
+
+    return completer.future;
+  }
+
+  /// Reconnect to the same port, resetting internal state.
+  Future<void> _reconnectAndReset() async {
+    disconnect();
+    await Future.delayed(const Duration(milliseconds: 300));
+    if (_currentPortName.isNotEmpty) {
+      connect(_currentPortName);
+    }
+  }
+
   /// Close controllers when service is destroyed
   void dispose() {
     disconnect();

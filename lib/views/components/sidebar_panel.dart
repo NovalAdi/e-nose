@@ -178,9 +178,12 @@ class _SidebarPanelState extends State<SidebarPanel> {
                     final msg = await settings.toggleConnection();
                     sampler.addLog(msg);
                     if (context.mounted) {
+                      final isError = msg.contains('Gagal');
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(
                           content: Text(msg),
+                          backgroundColor: isError ? AppColors.danger : AppColors.success,
+                          behavior: SnackBarBehavior.floating,
                           duration: const Duration(seconds: 3),
                         ),
                       );

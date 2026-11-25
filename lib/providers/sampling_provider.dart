@@ -106,14 +106,14 @@ class SamplingProvider with ChangeNotifier {
   /// Exhale / clean gas sequence (1 minute exhale, stop)
   Future<void> runFlushSequence() async {
     addLog("Membersihkan gas - flushing...");
-    _serialService.writeString('2'); // Send exhale signal
+    await _serialService.sendCommandWithAck('2'); // Send exhale signal
 
     // Use countdown timer so it can be cancelled
     final completer = Completer<void>();
     _startCountdown(
       60,
       onFinished: () async {
-        _serialService.writeString('3'); // Stop pumps
+        await _serialService.sendCommandWithAck('3'); // Stop pumps
         await Future.delayed(const Duration(seconds: 5));
         completer.complete();
       },
@@ -123,10 +123,13 @@ class SamplingProvider with ChangeNotifier {
   }
 
   /// Stop all operations immediately
-  void stopAll() {
+  Future<void> stopAll() async {
     _countdownTimer?.cancel();
     _serialSubscription?.cancel();
-    _serialService.writeString('3'); // Stop command
+    final success = await _serialService.sendCommandWithAck('3'); // Stop command
+    if (!success) {
+      addLog("Peringatan: perintah stop tidak dikirimi ACK. Cek koneksi.");
+    }
 
     final wasRunning = _status != AppStatus.idle;
     _status = AppStatus.idle;
@@ -191,19 +194,20 @@ class SamplingProvider with ChangeNotifier {
     notifyListeners();
 
     // Step 1: Send Stop, wait 3 seconds
-    _serialService.writeString('3');
+    addLog("Mengirim perintah STOP...");
+    await _serialService.sendCommandWithAck('3');
     await Future.delayed(const Duration(seconds: 3));
 
     // Step 2: Send Inhale, countdown sampling interval
     addLog("Menyedot sampel gas...");
-    _serialService.writeString('1');
+    await _serialService.sendCommandWithAck('1');
 
     final samplingDurationSeconds = settings.samplingInterval.toInt();
     _startCountdown(
       samplingDurationSeconds,
       onFinished: () async {
         // Step 3: Send Stop, wait 20 seconds
-        _serialService.writeString('3');
+        await _serialService.sendCommandWithAck('3');
         addLog("Mempersiapkan pembacaan data sensor (tunggu 20 detik)...");
 
         _startCountdown(
@@ -282,19 +286,20 @@ class SamplingProvider with ChangeNotifier {
     notifyListeners();
 
     // Step 1: Stop, wait 3 seconds
-    _serialService.writeString('3');
+    addLog("Mengirim perintah STOP...");
+    await _serialService.sendCommandWithAck('3');
     await Future.delayed(const Duration(seconds: 3));
 
     // Step 2: Inhale, countdown
     addLog("Menyedot gas sampel...");
-    _serialService.writeString('1');
+    await _serialService.sendCommandWithAck('1');
 
     final samplingDurationSeconds = settings.samplingInterval.toInt();
     _startCountdown(
       samplingDurationSeconds,
       onFinished: () async {
         // Step 3: Stop, wait 60 seconds (original Python delay before reading)
-        _serialService.writeString('3');
+        await _serialService.sendCommandWithAck('3');
         addLog("Mempersiapkan pembacaan sensor (tunggu 60 detik)...");
 
         _startCountdown(
